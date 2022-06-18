@@ -28,22 +28,32 @@ contract Staker {
     _;
   }
 
+  modifier notOpenForWithdraw() {
+    require(!openForWithdraw, 'The staking period is over and the contract is open for withdrawal');
+    _;
+  }
+
   // TODO: Collect funds in a payable `stake()` function and track individual `balances` with a mapping:
   //  ( make sure to add a `Stake(address,uint256)` event and emit it for the frontend <List/> display )
-  function stake() public payable notCompleted notClosed {
+  function stake() public payable notCompleted notClosed notOpenForWithdraw {
+    require(this.timeLeft() > 0, 'The staking period is over');
     balances[msg.sender] += msg.value;
     emit Stake(msg.sender, msg.value);
   }
 
   // TODO: After some `deadline` allow anyone to call an `execute()` function
   //  It should call `exampleExternalContract.complete{value: address(this).balance}()` to send all the value
-  function execute() public notCompleted notClosed {
+  function execute() public notCompleted notClosed notOpenForWithdraw {
     require(this.timeLeft() == 0, 'The staking is in progress');
     if (address(this).balance >= threshold) {
       exampleExternalContract.complete{value: address(this).balance}();
     } else {
       // TODO: if the `threshold` was not met, allow everyone to call a `withdraw()` function
-      openForWithdraw = true;
+      if (address(this).balance == 0) {
+        exampleExternalContract.close();
+      } else {
+        openForWithdraw = true;
+      }
     }
   }
 
@@ -58,6 +68,7 @@ contract Staker {
 
   function withdraw() public notCompleted notClosed {
     require(openForWithdraw, 'Not open for withdraw');
+    require(balances[msg.sender] > 0, 'You have nothing to withdraw');
     uint256 value = balances[msg.sender];
     payable(msg.sender).transfer(value);
     balances[msg.sender] -= value;
